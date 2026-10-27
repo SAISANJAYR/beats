@@ -1,6 +1,7 @@
 # Environment and Secret Keys (CRITICAL: Never expose API keys)
 .env
 .env.*
+!.env.example
 *.env
 *.key
 credentials.json
