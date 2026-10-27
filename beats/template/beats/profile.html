@@ -1,0 +1,99 @@
+{% extends "beats/base.html" %}
+
+{% block title %}{{ profile_user.username }}'s Music Diary — Beats{% endblock %}
+
+{% block content %}
+<div style="background:var(--lb-surface);border:1px solid var(--lb-border);border-radius:var(--radius-sm);padding:2rem;margin-bottom:2.5rem;display:flex;align-items:center;gap:1.75rem;">
+  <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--lb-green),var(--lb-cyan));display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:800;color:#14181c;flex-shrink:0;">
+    {{ profile_user.username|first|upper }}
+  </div>
+  <div style="flex:1;">
+    <h1 style="font-family:var(--font-display);font-size:1.8rem;font-weight:800;color:#fff;margin-bottom:0.2rem;">
+      {{ profile_user.username }}
+    </h1>
+    <div style="color:var(--text-muted);font-size:0.75rem;">
+      Listening since {{ profile_user.date_joined|date:"F Y" }}
+    </div>
+  </div>
+  <div style="display:flex;gap:2rem;text-align:center;">
+    <div>
+      <div style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:#fff;">{{ ratings|length }}</div>
+      <div style="font-size:0.68rem;text-transform:uppercase;color:var(--text-muted);">Tracks Logged</div>
+    </div>
+    <div>
+      <div style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:var(--lb-orange);">{{ liked|length }}</div>
+      <div style="font-size:0.68rem;text-transform:uppercase;color:var(--text-muted);">Loved</div>
+    </div>
+    {% if avg_score %}
+      <div>
+        <div style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:var(--lb-green);">★ {{ avg_score|floatformat:1 }}</div>
+        <div style="font-size:0.68rem;text-transform:uppercase;color:var(--text-muted);">Avg Score</div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Rated Songs Crate -->
+<div class="lb-section-title">
+  <h2><span>🎵</span> Rated Tracks ({{ ratings|length }})</h2>
+</div>
+
+{% if ratings %}
+  <div class="lb-crate-grid" style="margin-bottom:3rem;">
+    {% for r in ratings %}
+      <a href="{% url 'song_detail' r.song.pk %}" class="vinyl-jacket">
+        <div class="vinyl-sleeve">
+          {% if r.song.cover_url %}
+            <img src="{{ r.song.cover_url }}" alt="{{ r.song.title }}" class="vinyl-cover" />
+          {% else %}
+            <div class="vinyl-cover-placeholder">
+              <span class="vinyl-icon">🎵</span>
+            </div>
+          {% endif %}
+        </div>
+        <div class="vinyl-disc">
+          <div class="vinyl-center-label"><div class="vinyl-spindle-hole"></div></div>
+        </div>
+        <div class="vinyl-meta">
+          <div class="vinyl-title">{{ r.song.title }}</div>
+          <div class="vinyl-artist">{{ r.song.artist }}</div>
+          <div class="vinyl-rating-row">
+            <span class="lb-stars">{{ r.score_display }}</span>
+            {% if r.liked %}<span>❤️</span>{% endif %}
+          </div>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <p style="color:var(--text-muted);font-style:italic;margin-bottom:3rem;">No tracks rated yet.</p>
+{% endif %}
+
+<!-- Songs Added -->
+{% if songs_added %}
+  <div class="lb-section-title">
+    <h2><span>📀</span> Songs Added to Crate ({{ songs_added|length }})</h2>
+  </div>
+  <div class="lb-crate-grid">
+    {% for song in songs_added %}
+      <a href="{% url 'song_detail' song.pk %}" class="vinyl-jacket">
+        <div class="vinyl-sleeve">
+          {% if song.cover_url %}
+            <img src="{{ song.cover_url }}" alt="{{ song.title }}" class="vinyl-cover" />
+          {% else %}
+            <div class="vinyl-cover-placeholder"><span>🎵</span></div>
+          {% endif %}
+        </div>
+        <div class="vinyl-disc">
+          <div class="vinyl-center-label"><div class="vinyl-spindle-hole"></div></div>
+        </div>
+        <div class="vinyl-meta">
+          <div class="vinyl-title">{{ song.title }}</div>
+          <div class="vinyl-artist">{{ song.artist }}</div>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+{% endif %}
+
+{% endblock %}

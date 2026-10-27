@@ -1,0 +1,67 @@
+{% extends "beats/base.html" %}
+
+{% block title %}Join Beats — The Letterboxd for Songs{% endblock %}
+
+{% block content %}
+<div class="lb-form-box" id="signup-box">
+  <div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.75rem;">
+    <span class="lb-dot green"></span>
+    <span class="lb-dot orange"></span>
+    <span class="lb-dot cyan"></span>
+    <span style="font-family:var(--font-display);font-weight:700;font-size:0.85rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;">JOIN BEATS</span>
+  </div>
+
+  <h1 class="lb-form-title">Start your music diary.</h1>
+  <p class="lb-form-sub">Track every vinyl and digital song you hear. Rate, review, and dig with AI.</p>
+
+  <form method="POST" id="signup-form">
+    {% csrf_token %}
+
+    <div class="lb-form-field">
+      <label class="lb-form-label" for="id_username">Username</label>
+      <input type="text" name="username" id="id_username" class="lb-input" placeholder="Choose a username" required autofocus />
+      {% if form.username.errors %}
+        <div style="color:var(--lb-red);font-size:0.75rem;margin-top:0.25rem;">{{ form.username.errors.0 }}</div>
+      {% endif %}
+    </div>
+
+    <div class="lb-form-field">
+      <label class="lb-form-label" for="id_email">Email Address</label>
+      <input type="email" name="email" id="id_email" class="lb-input" placeholder="you@domain.com" required />
+      {% if form.email.errors %}
+        <div style="color:var(--lb-red);font-size:0.75rem;margin-top:0.25rem;">{{ form.email.errors.0 }}</div>
+      {% endif %}
+    </div>
+
+    <div class="lb-form-field">
+      <label class="lb-form-label" for="id_password1">Password</label>
+      <input type="password" name="password1" id="id_password1" class="lb-input" placeholder="••••••••" required />
+      {% if form.password1.errors %}
+        <div style="color:var(--lb-red);font-size:0.75rem;margin-top:0.25rem;">{{ form.password1.errors.0 }}</div>
+      {% endif %}
+    </div>
+
+    <div class="lb-form-field">
+      <label class="lb-form-label" for="id_password2">Confirm Password</label>
+      <input type="password" name="password2" id="id_password2" class="lb-input" placeholder="••••••••" required />
+      {% if form.password2.errors %}
+        <div style="color:var(--lb-red);font-size:0.75rem;margin-top:0.25rem;">{{ form.password2.errors.0 }}</div>
+      {% endif %}
+    </div>
+
+    {% if form.non_field_errors %}
+      <div style="color:var(--lb-red);font-size:0.8rem;margin-bottom:1rem;">
+        ⚠️ {{ form.non_field_errors.0 }}
+      </div>
+    {% endif %}
+
+    <button type="submit" class="lb-btn-log" style="width:100%;justify-content:center;padding:0.7rem;margin-top:0.5rem;" id="signup-btn">
+      Create Free Account 🎵
+    </button>
+  </form>
+
+  <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--lb-border);text-align:center;font-size:0.8rem;color:var(--text-sub);">
+    Already have an account? <a href="{% url 'login' %}" style="color:var(--lb-green);font-weight:600;">Sign in</a>
+  </div>
+</div>
+{% endblock %}

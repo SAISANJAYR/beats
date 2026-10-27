@@ -1,0 +1,45 @@
+{% extends "beats/base.html" %}
+
+{% block title %}Sign In — Beats{% endblock %}
+
+{% block content %}
+<div class="lb-form-box" id="login-box">
+  <div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.75rem;">
+    <span class="lb-dot green"></span>
+    <span class="lb-dot orange"></span>
+    <span class="lb-dot cyan"></span>
+    <span style="font-family:var(--font-display);font-weight:700;font-size:0.85rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;">BEATS FM</span>
+  </div>
+
+  <h1 class="lb-form-title">Welcome back.</h1>
+  <p class="lb-form-sub">Sign in to log songs, write reviews, and build your music diary.</p>
+
+  <form method="POST" id="login-form">
+    {% csrf_token %}
+
+    <div class="lb-form-field">
+      <label class="lb-form-label" for="id_username">Username</label>
+      <input type="text" name="username" id="id_username" class="lb-input" placeholder="Your username" required autofocus />
+    </div>
+
+    <div class="lb-form-field">
+      <label class="lb-form-label" for="id_password">Password</label>
+      <input type="password" name="password" id="id_password" class="lb-input" placeholder="••••••••" required />
+    </div>
+
+    {% if form.non_field_errors %}
+      <div style="color:var(--lb-red);font-size:0.8rem;margin-bottom:1rem;">
+        ⚠️ {{ form.non_field_errors.0 }}
+      </div>
+    {% endif %}
+
+    <button type="submit" class="lb-btn-log" style="width:100%;justify-content:center;padding:0.7rem;margin-top:0.5rem;" id="login-btn">
+      Sign In 🎵
+    </button>
+  </form>
+
+  <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--lb-border);text-align:center;font-size:0.8rem;color:var(--text-sub);">
+    Don't have an account? <a href="{% url 'signup' %}" style="color:var(--lb-green);font-weight:600;">Create one for free</a>
+  </div>
+</div>
+{% endblock %}

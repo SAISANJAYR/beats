@@ -1,0 +1,70 @@
+{% extends "beats/base.html" %}
+
+{% block title %}Add Track to Crate — Beats{% endblock %}
+
+{% block content %}
+<div class="lb-form-box" id="add-song-box">
+  
+  <h1 class="lb-form-title">Add Track to Crate 🎵</h1>
+  <p class="lb-form-sub">Enter the song details to press a new record into the community crate.</p>
+
+  <form method="POST" id="add-song-form">
+    {% csrf_token %}
+
+    <div class="lb-form-field">
+      <label class="lb-form-label" for="id_title">Track Title *</label>
+      <input type="text" name="title" id="id_title" class="lb-input" placeholder="e.g. Dreams" value="{{ form.title.value|default:'' }}" required />
+      {% if form.title.errors %}
+        <div style="color:var(--lb-red);font-size:0.75rem;margin-top:0.25rem;">{{ form.title.errors.0 }}</div>
+      {% endif %}
+    </div>
+
+    <div class="lb-form-field">
+      <label class="lb-form-label" for="id_artist">Artist *</label>
+      <input type="text" name="artist" id="id_artist" class="lb-input" placeholder="e.g. Fleetwood Mac" value="{{ form.artist.value|default:'' }}" required />
+      {% if form.artist.errors %}
+        <div style="color:var(--lb-red);font-size:0.75rem;margin-top:0.25rem;">{{ form.artist.errors.0 }}</div>
+      {% endif %}
+    </div>
+
+    <div class="lb-form-field">
+      <label class="lb-form-label" for="id_album">Album</label>
+      <input type="text" name="album" id="id_album" class="lb-input" placeholder="e.g. Rumours" value="{{ form.album.value|default:'' }}" />
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+      <div class="lb-form-field">
+        <label class="lb-form-label" for="id_genre">Genre</label>
+        <select name="genre" id="id_genre" class="lb-input">
+          {% for val, label in form.fields.genre.choices %}
+            <option value="{{ val }}" {% if form.genre.value == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="lb-form-field">
+        <label class="lb-form-label" for="id_release_year">Release Year</label>
+        <input type="number" name="release_year" id="id_release_year" class="lb-input" placeholder="e.g. 1977" value="{{ form.release_year.value|default:'' }}" />
+      </div>
+    </div>
+
+    <div class="lb-form-field">
+      <label class="lb-form-label" for="id_cover_url">Album Art Image URL</label>
+      <input type="url" name="cover_url" id="id_cover_url" class="lb-input" placeholder="https://..." value="{{ form.cover_url.value|default:'' }}" />
+      <span style="font-size:0.7rem;color:var(--text-muted);display:block;margin-top:0.25rem;">
+        Direct link to album artwork (Spotify, Apple Music, or Wikipedia image URL).
+      </span>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;margin-top:1.5rem;">
+      <button type="submit" class="lb-btn-log" style="flex:1;justify-content:center;padding:0.65rem;">
+        + Add to Crate
+      </button>
+      <a href="{% url 'home' %}" class="lb-btn-log" style="background:#202830;color:var(--text-sub);border:1px solid var(--lb-border);">
+        Cancel
+      </a>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

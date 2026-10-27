@@ -1,0 +1,88 @@
+{% extends "beats/base.html" %}
+
+{% block title %}{% if existing %}Edit Log{% else %}Log Track{% endif %} — {{ song.title }} | Beats{% endblock %}
+
+{% block content %}
+<div class="lb-form-box" id="rate-song-box">
+  
+  <!-- Song header snippet -->
+  <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;padding-bottom:1.25rem;border-bottom:1px solid var(--lb-border);">
+    <div style="width:54px;height:54px;border-radius:var(--radius-xs);overflow:hidden;background:#111;flex-shrink:0;border:1px solid var(--lb-border);">
+      {% if song.cover_url %}
+        <img src="{{ song.cover_url }}" alt="{{ song.title }}" style="width:100%;height:100%;object-fit:cover;" />
+      {% else %}
+        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.4rem;">🎵</div>
+      {% endif %}
+    </div>
+    <div>
+      <div style="font-family:var(--font-display);font-weight:700;font-size:1.05rem;color:#fff;">{{ song.title }}</div>
+      <div style="color:var(--text-sub);font-size:0.8rem;">{{ song.artist }} {% if song.release_year %}({{ song.release_year }}){% endif %}</div>
+    </div>
+  </div>
+
+  <h1 class="lb-form-title">
+    {% if existing %}Edit Diary Entry{% else %}I Listened To...{% endif %}
+  </h1>
+  <p class="lb-form-sub">
+    Rate this track from ½ to 5 stars, like, or write your review.
+  </p>
+
+  <form method="POST" id="rate-form">
+    {% csrf_token %}
+
+    <!-- Star Rating Selection (Half-star supported) -->
+    <div class="lb-form-field">
+      <label class="lb-form-label">Rating (0.5 to 5.0 Stars) *</label>
+      <div class="star-radio-group">
+        {% for choice_val, choice_lbl in form.fields.score.choices %}
+          <div class="star-radio-item">
+            <input
+              type="radio"
+              name="score"
+              value="{{ choice_val }}"
+              id="star-{{ choice_val|slugify }}"
+              {% if form.score.value == choice_val|stringformat:"s" %}checked{% endif %}
+              {% if existing and existing.score == choice_val %}checked{% endif %}
+              required
+            />
+            <label for="star-{{ choice_val|slugify }}">{{ choice_lbl }}</label>
+          </div>
+        {% endfor %}
+      </div>
+      {% if form.score.errors %}
+        <div style="color:var(--lb-red);font-size:0.75rem;margin-top:0.3rem;">{{ form.score.errors.0 }}</div>
+      {% endif %}
+    </div>
+
+    <!-- Review Textarea -->
+    <div class="lb-form-field">
+      <label class="lb-form-label" for="id_review">Review (Optional)</label>
+      <textarea
+        name="review"
+        id="id_review"
+        class="lb-input"
+        rows="4"
+        placeholder="Add your thoughts, favorite lyrics, or listening context..."
+      >{{ form.review.value|default:'' }}</textarea>
+    </div>
+
+    <!-- Liked Heart Checkbox -->
+    <div class="lb-form-field" style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0;">
+      <input type="checkbox" name="liked" id="id_liked" style="width:16px;height:16px;accent-color:var(--lb-orange);cursor:pointer;" {% if form.liked.value %}checked{% endif %}>
+      <label for="id_liked" style="font-size:0.85rem;color:#ffffff;cursor:pointer;">
+        ❤️ Liked (Heart this track)
+      </label>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;margin-top:1.5rem;">
+      <button type="submit" class="lb-btn-log" style="flex:1;justify-content:center;padding:0.65rem;" id="save-log-btn">
+        {% if existing %}Save Changes{% else %}Log Track 🎵{% endif %}
+      </button>
+      <a href="{% url 'song_detail' song.pk %}" class="lb-btn-log" style="background:#202830;color:var(--text-sub);border:1px solid var(--lb-border);">
+        Cancel
+      </a>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

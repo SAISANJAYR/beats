@@ -1,0 +1,212 @@
+{% extends "beats/base.html" %}
+{% load static %}
+
+{% block title %}Beats — Track Songs You Love | Letterboxd for Music{% endblock %}
+
+{% block content %}
+
+  <!-- ── Letterboxd Hero Tagline ─────────────────────────────── -->
+  <section class="lb-hero">
+    <div class="lb-hero-text">
+      <h1>Track songs you <span class="green">love</span>. Log what you <span class="orange">listen to</span>.</h1>
+      <p>The definitive music diary. Rate tracks with half-star precision, write album reviews, and dig deeper with the Gemini-powered AI crate curator.</p>
+    </div>
+    <div class="lb-hero-stats">
+      <div>
+        <div class="lb-stat-number">{{ total_songs }}</div>
+        <div class="lb-stat-label">Tracks In Crate</div>
+      </div>
+      <div style="width:1px;height:32px;background:var(--lb-border);"></div>
+      <div>
+        <div class="lb-stat-number" style="color:var(--lb-green);">{{ total_ratings }}</div>
+        <div class="lb-stat-label">Ratings Logged</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Sub Navigation & Filters ────────────────────────────── -->
+  <div class="lb-subnav" style="border-radius:var(--radius-sm);margin-bottom:2rem;">
+    <div class="lb-subnav-inner">
+      <div class="lb-chips">
+        <span style="font-size:0.75rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-right:0.3rem;">Genres:</span>
+        <a href="?{% if sort %}sort={{ sort }}{% endif %}" class="lb-chip {% if not selected_genre %}active{% endif %}">
+          All
+        </a>
+        {% for val, label in genre_choices %}
+          <a href="?genre={{ val }}{% if sort %}&sort={{ sort }}{% endif %}{% if query %}&q={{ query }}{% endif %}"
+             class="lb-chip {% if selected_genre == val %}active{% endif %}">
+            {{ label }}
+          </a>
+        {% endfor %}
+      </div>
+
+      <div class="lb-sort-group">
+        <span>Sort:</span>
+        <a href="?sort=popular{% if selected_genre %}&genre={{ selected_genre }}{% endif %}" class="lb-sort-link {% if sort == 'popular' %}active{% endif %}">Popular</a>
+        <span>•</span>
+        <a href="?sort=rating{% if selected_genre %}&genre={{ selected_genre }}{% endif %}" class="lb-sort-link {% if sort == 'rating' %}active{% endif %}">Top Rated</a>
+        <span>•</span>
+        <a href="?sort=newest{% if selected_genre %}&genre={{ selected_genre }}{% endif %}" class="lb-sort-link {% if sort == 'newest' %}active{% endif %}">Newest</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Popular This Week (Vinyl Poster Grid with Grooved Disc Slide) ── -->
+  <section style="margin-bottom: 3rem;">
+    <div class="lb-section-title">
+      <h2>
+        <span class="eq-visualizer">
+          <span class="eq-bar"></span>
+          <span class="eq-bar"></span>
+          <span class="eq-bar"></span>
+        </span>
+        {% if query %}Search Results for "{{ query }}"{% elif selected_genre %}{{ selected_genre|upper }} Tracks{% else %}Popular In The Crates{% endif %}
+      </h2>
+      <span style="font-size:0.75rem;color:var(--text-muted);font-family:var(--font-mono);">{{ songs|length }} TRACKS</span>
+    </div>
+
+    {% if songs %}
+      <div class="lb-crate-grid" id="crate-grid">
+        {% for song in songs %}
+          <a href="{% url 'song_detail' song.pk %}" class="vinyl-jacket" id="jacket-{{ song.pk }}">
+            <!-- Album Jacket Sleeve -->
+            <div class="vinyl-sleeve">
+              {% if song.cover_url %}
+                <img src="{{ song.cover_url }}" alt="{{ song.title }} cover" class="vinyl-cover" loading="lazy" />
+              {% else %}
+                <div class="vinyl-cover-placeholder">
+                  <span class="vinyl-icon">🎵</span>
+                  <span style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.06em;">{{ song.genre }}</span>
+                </div>
+              {% endif %}
+            </div>
+
+            <!-- Realistic Vinyl Disc (Slides out and spins on hover) -->
+            <div class="vinyl-disc">
+              <div class="vinyl-center-label">
+                <div class="vinyl-spindle-hole"></div>
+              </div>
+            </div>
+
+            <!-- Metadata under the sleeve -->
+            <div class="vinyl-meta">
+              <div class="vinyl-title">{{ song.title }}</div>
+              <div class="vinyl-artist">{{ song.artist }}</div>
+              <div class="vinyl-rating-row">
+                <span class="lb-stars">
+                  {% if song.avg_rating %}
+                    ★ {{ song.avg_rating|floatformat:1 }}
+                  {% else %}
+                    <span style="color:var(--text-muted);font-size:0.7rem;font-weight:400;">Unrated</span>
+                  {% endif %}
+                </span>
+                <span class="vinyl-logs-count">
+                  {{ song.num_ratings }} log{{ song.num_ratings|pluralize }}
+                </span>
+              </div>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div style="text-align:center;padding:4rem 1rem;background:var(--lb-surface);border:1px solid var(--lb-border);border-radius:var(--radius-sm);">
+        <div style="font-size:2.5rem;margin-bottom:0.75rem;">📀</div>
+        <h3 style="font-size:1.1rem;color:#fff;margin-bottom:0.4rem;">No tracks found</h3>
+        <p style="color:var(--text-sub);font-size:0.85rem;margin-bottom:1.5rem;">
+          No songs matched your filter or search.
+        </p>
+        <a href="{% url 'add_song' %}" class="lb-btn-log">+ Add First Track</a>
+      </div>
+    {% endif %}
+  </section>
+
+  <!-- ── Split Section: Recent Activity / Diary & Sidebar Charts ── -->
+  <div class="lb-split-layout">
+    
+    <!-- Left: Community Diary Reviews -->
+    <div>
+      <div class="lb-section-title">
+        <h2><span>💬</span> Recent Diary Reviews</h2>
+      </div>
+
+      {% if recent_reviews %}
+        <div class="lb-review-list">
+          {% for r in recent_reviews %}
+            <div class="lb-review-row" id="review-row-{{ r.pk }}">
+              <a href="{% url 'song_detail' r.song.pk %}" class="lb-review-thumb">
+                {% if r.song.cover_url %}
+                  <img src="{{ r.song.cover_url }}" alt="{{ r.song.title }}" loading="lazy" />
+                {% else %}
+                  <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#182028;font-size:1.4rem;">🎵</div>
+                {% endif %}
+              </a>
+
+              <div class="lb-review-main">
+                <div class="lb-review-top">
+                  <a href="{% url 'song_detail' r.song.pk %}" class="lb-review-song">{{ r.song.title }}</a>
+                  <span class="lb-review-artist">by {{ r.song.artist }}</span>
+                  <span class="lb-review-date">{{ r.created_at|date:"M j" }}</span>
+                </div>
+
+                <div class="lb-review-stars">
+                  <span>{{ r.score_display }}</span>
+                  {% if r.liked %}<span class="lb-heart" title="Liked">❤️</span>{% endif %}
+                  <span style="color:var(--text-muted);font-size:0.72rem;margin-left:0.25rem;">
+                    reviewed by <a href="{% url 'profile' r.user.username %}" class="lb-review-user">{{ r.user.username }}</a>
+                  </span>
+                </div>
+
+                <div class="lb-review-quote">
+                  "{{ r.review }}"
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p style="color:var(--text-muted);font-size:0.85rem;font-style:italic;">No reviews logged yet. Be the first to review a track!</p>
+      {% endif %}
+    </div>
+
+    <!-- Right: Sidebar Charts & AI Assistant Callout -->
+    <aside>
+      <!-- Top 5 All-Time -->
+      <div class="lb-sidebar-card">
+        <div class="lb-sidebar-title">
+          <span>🏆 Top Rated All-Time</span>
+          <span style="font-size:0.68rem;color:var(--lb-green);">HI-FI</span>
+        </div>
+        <div class="lb-rank-list">
+          {% for top in popular_songs|slice:":5" %}
+            <a href="{% url 'song_detail' top.pk %}" class="lb-rank-item">
+              <span class="lb-rank-num">{{ forloop.counter }}</span>
+              <div class="lb-rank-info">
+                <div class="lb-rank-title">{{ top.title }}</div>
+                <div class="lb-rank-artist">{{ top.artist }}</div>
+              </div>
+              <div class="lb-rank-score">
+                {% if top.avg_rating %}★ {{ top.avg_rating|floatformat:1 }}{% else %}—{% endif %}
+              </div>
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Crate Digger AI Prompt Spotlight -->
+      <div class="lb-sidebar-card" style="border-color:rgba(64,188,244,0.3);background:linear-gradient(145deg, #161c22, #1b2530);">
+        <div class="lb-sidebar-title" style="color:var(--lb-cyan);border-color:rgba(64,188,244,0.2);">
+          <span>✦ Crate Digger AI</span>
+          <span class="crate-ai-badge">Gemini</span>
+        </div>
+        <p style="font-size:0.8rem;color:var(--text-sub);line-height:1.45;margin-bottom:1rem;">
+          Stuck in a listening rut? Give Crate Digger any vibe or scenario and discover hidden gems powered by Google Gemini.
+        </p>
+        <button class="lb-btn-log" style="width:100%;justify-content:center;background:var(--lb-cyan);color:#14181c;" onclick="document.getElementById('toggle-crate-ai').click();">
+          Open AI Assistant 🎵
+        </button>
+      </div>
+    </aside>
+
+  </div>
+
+{% endblock %}

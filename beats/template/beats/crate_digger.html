@@ -1,0 +1,264 @@
+{% extends "beats/base.html" %}
+{% load static %}
+
+{% block title %}Crate Digger AI — Music Recommendations with Gemini | Beats{% endblock %}
+{% block description %}Ask Crate Digger for personalized song recommendations by mood, scenario, or theme. Powered by Google Gemini.{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:2rem;">
+  <div class="lb-section-title">
+    <h2>
+      <span class="lb-dot cyan"></span>
+      Crate Digger Studio
+      <span class="crate-ai-badge">Powered by Gemini</span>
+    </h2>
+    <span style="font-size:0.75rem;color:var(--text-muted);">AI MUSIC CURATION</span>
+  </div>
+  <p style="color:var(--text-sub);font-size:0.92rem;max-width:680px;line-height:1.5;">
+    Describe any vibe, cinematic scene, obscure genre blend, or emotional weather. Crate Digger will unearth tracks from the digital vinyl crates and let you log them directly into your diary.
+  </p>
+</div>
+
+<div class="studio-layout">
+  
+  <!-- Left Side: Prompt Ideas & API Key Settings -->
+  <div class="studio-panel">
+    <div style="font-family:var(--font-display);font-size:0.85rem;font-weight:700;text-transform:uppercase;color:var(--text-main);margin-bottom:0.75rem;">
+      🎧 Prompt Inspiration
+    </div>
+    <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1.5rem;">
+      {% for prompt in popular_prompts %}
+        <button class="ai-chip studio-prompt-trigger" style="text-align:left;padding:0.5rem 0.75rem;line-height:1.35;" data-prompt="{{ prompt }}">
+          "{{ prompt }}"
+        </button>
+      {% endfor %}
+    </div>
+
+    <!-- API Key configuration panel -->
+    <div style="border-top:1px solid var(--lb-border);padding-top:1rem;">
+      <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.4rem;">
+        🔑 Gemini API Key
+      </div>
+      <p style="font-size:0.72rem;color:var(--text-sub);line-height:1.4;margin-bottom:0.6rem;">
+        Enter your Gemini key to use your own quota (saved locally in your browser).
+      </p>
+      <input type="password" class="ai-key-input" id="studio-gemini-key" placeholder="AIzaSy..." style="width:100%;margin-bottom:0.4rem;" />
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <button class="ai-key-save" id="studio-save-key">Save Key</button>
+        <a href="https://aistudio.google.com/app/apikey" target="_blank" style="font-size:0.7rem;color:var(--lb-cyan);text-decoration:underline;">
+          Get free key ↗
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Side: Dedicated Chat Feed -->
+  <div class="studio-feed">
+    
+    <!-- Feed Header -->
+    <div style="padding:0.75rem 1.25rem;background:#14181c;border-bottom:1px solid var(--lb-border);display:flex;align-items:center;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:0.5rem;font-weight:700;font-size:0.85rem;">
+        <span class="eq-visualizer">
+          <span class="eq-bar"></span>
+          <span class="eq-bar"></span>
+          <span class="eq-bar"></span>
+        </span>
+        <span>Vinyl Crate Session</span>
+      </div>
+      <button id="clear-studio-feed" style="background:transparent;border:none;color:var(--text-muted);font-size:0.72rem;cursor:pointer;">
+        Clear Session
+      </button>
+    </div>
+
+    <!-- Message Stream -->
+    <div class="ai-chat-body" id="studio-chat-body" style="height:auto;">
+      <div class="ai-bubble bot">
+        <div class="ai-bubble-intro">
+          👋 Welcome to the listening booth! Tell me what you want to hear.
+        </div>
+        <p style="font-size:0.75rem;color:var(--text-muted);">
+          You can request tempos, specific instruments, moods, eras, or scenes from your favorite films.
+        </p>
+      </div>
+    </div>
+
+    <!-- Input Bar -->
+    <form class="ai-input-bar" id="studio-chat-form" style="background:#161c22;">
+      {% csrf_token %}
+      <input
+        type="text"
+        class="ai-input-field"
+        id="studio-user-input"
+        placeholder="Type a theme, mood, or musical scenario..."
+        autocomplete="off"
+      />
+      <button type="submit" class="ai-send-btn" id="studio-send-btn">Dig 🎵</button>
+    </form>
+  </div>
+
+</div>
+
+<script>
+  const studioChatBody = document.getElementById('studio-chat-body');
+  const studioChatForm = document.getElementById('studio-chat-form');
+  const studioInput = document.getElementById('studio-user-input');
+  const studioSendBtn = document.getElementById('studio-send-btn');
+  const studioKeyInput = document.getElementById('studio-gemini-key');
+  const studioSaveKey = document.getElementById('studio-save-key');
+  const clearSessionBtn = document.getElementById('clear-studio-feed');
+
+  // Load key
+  const currentKey = localStorage.getItem('beats_gemini_api_key') || '';
+  if (currentKey) studioKeyInput.value = currentKey;
+
+  studioSaveKey.addEventListener('click', () => {
+    const val = studioKeyInput.value.trim();
+    if (val) {
+      localStorage.setItem('beats_gemini_api_key', val);
+      alert('Gemini API key saved in browser session!');
+    } else {
+      localStorage.removeItem('beats_gemini_api_key');
+      alert('Key removed.');
+    }
+  });
+
+  clearSessionBtn.addEventListener('click', () => {
+    studioChatBody.innerHTML = `
+      <div class="ai-bubble bot">
+        <div class="ai-bubble-intro">Session cleared. Ready for the next crate dig!</div>
+      </div>
+    `;
+  });
+
+  // Prompt trigger clicks
+  document.querySelectorAll('.studio-prompt-trigger').forEach(b => {
+    b.addEventListener('click', () => {
+      studioInput.value = b.getAttribute('data-prompt');
+      studioChatForm.dispatchEvent(new Event('submit'));
+    });
+  });
+
+  studioChatForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const prompt = studioInput.value.trim();
+    if (!prompt) return;
+
+    // User bubble
+    const uBubble = document.createElement('div');
+    uBubble.className = 'ai-bubble user';
+    uBubble.textContent = prompt;
+    studioChatBody.appendChild(uBubble);
+    studioInput.value = '';
+    studioChatBody.scrollTop = studioChatBody.scrollHeight;
+
+    // Loading indicator
+    const loadBubble = document.createElement('div');
+    loadBubble.className = 'ai-bubble bot';
+    loadBubble.innerHTML = `
+      <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">Gemini is curating your tracks...</div>
+      <div class="ai-typing-indicator">
+        <span class="ai-typing-dot"></span>
+        <span class="ai-typing-dot"></span>
+        <span class="ai-typing-dot"></span>
+      </div>
+    `;
+    studioChatBody.appendChild(loadBubble);
+    studioChatBody.scrollTop = studioChatBody.scrollHeight;
+
+    studioSendBtn.disabled = true;
+
+    try {
+      const apiKey = localStorage.getItem('beats_gemini_api_key') || '';
+      const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+      const resp = await fetch('/api/recommendations/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify({ prompt, api_key: apiKey })
+      });
+
+      const res = await resp.json();
+      loadBubble.remove();
+
+      if (resp.ok && res.success) {
+        renderStudioRecommendations(res.data);
+      } else {
+        const errBubble = document.createElement('div');
+        errBubble.className = 'ai-bubble bot';
+        errBubble.style.borderColor = 'var(--lb-red)';
+        errBubble.innerHTML = `
+          <div style="color:var(--lb-red);font-weight:700;margin-bottom:4px;">⚠️ Notice</div>
+          <div style="font-size:0.8rem;line-height:1.4;">${res.error || 'Failed to fetch recommendations.'}</div>
+          <div style="margin-top:8px;font-size:0.75rem;">
+            Please check your Gemini API key in the left panel. Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--lb-cyan);text-decoration:underline;">aistudio.google.com</a>.
+          </div>
+        `;
+        studioChatBody.appendChild(errBubble);
+      }
+    } catch (err) {
+      loadBubble.remove();
+      const errBubble = document.createElement('div');
+      errBubble.className = 'ai-bubble bot';
+      errBubble.innerHTML = `<span style="color:var(--lb-red);">Connection error: ${err.message}</span>`;
+      studioChatBody.appendChild(errBubble);
+    } finally {
+      studioSendBtn.disabled = false;
+      studioChatBody.scrollTop = studioChatBody.scrollHeight;
+    }
+  });
+
+  function renderStudioRecommendations(recData) {
+    const bubble = document.createElement('div');
+    bubble.className = 'ai-bubble bot';
+
+    let html = `<div class="ai-bubble-intro">${recData.intro || 'Here are the selections:'}</div>`;
+
+    if (recData.recommendations && recData.recommendations.length > 0) {
+      recData.recommendations.forEach((item, idx) => {
+        const spotifySearch = `https://open.spotify.com/search/${encodeURIComponent(item.title + ' ' + item.artist)}`;
+        const youtubeSearch = `https://www.youtube.com/results?search_query=${encodeURIComponent(item.title + ' ' + item.artist)}`;
+
+        html += `
+          <div class="ai-track-card" id="studio-rec-${idx}">
+            <div class="ai-track-head">
+              <span class="ai-track-title">${item.title}</span>
+              <span class="ai-track-year">${item.year || ''}</span>
+            </div>
+            <div class="ai-track-artist">${item.artist} ${item.album ? '• <em>' + item.album + '</em>' : ''}</div>
+            ${item.vibe_tag ? `<div class="ai-track-vibe">${item.vibe_tag}</div>` : ''}
+            <div class="ai-track-review">${item.review || ''}</div>
+            <div class="ai-track-actions">
+              ${item.existing_id ? `
+                <a href="/song/${item.existing_id}/" class="ai-add-btn" style="background:var(--lb-surface);border:1px solid var(--lb-border);color:var(--lb-green);">
+                  ★ In Crate (${item.avg_rating || 'Unrated'})
+                </a>
+              ` : `
+                <button class="ai-add-btn" onclick="quickAddSong(this, '${encodeURIComponent(item.title)}', '${encodeURIComponent(item.artist)}', '${encodeURIComponent(item.album || '')}', '${encodeURIComponent(item.genre || 'other')}', '${item.year || ''}')">
+                  + Log to Beats
+                </button>
+              `}
+              <a href="${spotifySearch}" target="_blank" class="stream-btn spotify" style="padding:0.25rem 0.6rem;font-size:0.7rem;">
+                Spotify ↗
+              </a>
+              <a href="${youtubeSearch}" target="_blank" class="stream-btn youtube" style="padding:0.25rem 0.6rem;font-size:0.7rem;">
+                YouTube ↗
+              </a>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    if (recData.outro) {
+      html += `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;font-style:italic;">${recData.outro}</div>`;
+    }
+
+    bubble.innerHTML = html;
+    studioChatBody.appendChild(bubble);
+    studioChatBody.scrollTop = studioChatBody.scrollHeight;
+  }
+</script>
+{% endblock %}

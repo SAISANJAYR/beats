@@ -1,0 +1,182 @@
+{% extends "beats/base.html" %}
+{% load static %}
+
+{% block title %}{{ song.title }} ({{ song.release_year|default:'Track' }}) — Beats{% endblock %}
+{% block description %}Listen to and rate {{ song.title }} by {{ song.artist }}. Average rating {{ song.avg_rating|floatformat:1 }}/5 on Beats.{% endblock %}
+
+{% block content %}
+
+  <!-- ── Song Detail Showcase ──────────────────────────────── -->
+  <div class="detail-stage" id="song-detail-stage">
+
+    <!-- Vinyl Jacket with Vinyl Record peek -->
+    <div class="detail-vinyl-showcase">
+      <div class="vinyl-sleeve">
+        {% if song.cover_url %}
+          <img src="{{ song.cover_url }}" alt="{{ song.title }} cover" class="vinyl-cover" />
+        {% else %}
+          <div class="vinyl-cover-placeholder">
+            <span class="vinyl-icon">🎵</span>
+            <span style="font-size:0.75rem;text-transform:uppercase;">{{ song.genre }}</span>
+          </div>
+        {% endif %}
+      </div>
+      <div class="vinyl-disc">
+        <div class="vinyl-center-label">
+          <div class="vinyl-spindle-hole"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center Main Metadata -->
+    <div class="detail-main-info">
+      <div class="detail-eyebrow">
+        <span class="detail-badge-hifi">HI-FI STEREO</span>
+        <span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;">
+          33⅓ RPM • {{ song.get_genre_display }}
+        </span>
+        {% if song.release_year %}
+          <span style="font-family:var(--font-mono);font-size:0.75rem;color:var(--text-muted);">
+            ({{ song.release_year }})
+          </span>
+        {% endif %}
+      </div>
+
+      <h1 class="detail-title">{{ song.title }}</h1>
+      <div class="detail-artist-row">
+        by <strong>{{ song.artist }}</strong>
+        {% if song.album %}
+          <span style="color:var(--text-muted);">from the album</span> <em>{{ song.album }}</em>
+        {% endif %}
+      </div>
+
+      <!-- Quick Streaming Audio Links -->
+      <div class="stream-actions">
+        <a href="https://open.spotify.com/search/{{ song.title|urlencode }}%20{{ song.artist|urlencode }}"
+           target="_blank" rel="noopener noreferrer" class="stream-btn spotify" id="btn-spotify">
+          <span>🟢</span> Listen on Spotify
+        </a>
+        <a href="https://www.youtube.com/results?search_query={{ song.title|urlencode }}+{{ song.artist|urlencode }}"
+           target="_blank" rel="noopener noreferrer" class="stream-btn youtube" id="btn-youtube">
+          <span>▶️</span> Watch on YouTube
+        </a>
+      </div>
+
+      <!-- Added By & Meta info -->
+      <div style="font-size:0.75rem;color:var(--text-dim);border-top:1px solid var(--lb-border);padding-top:0.75rem;margin-top:1rem;">
+        Track logged by 
+        {% if song.added_by %}
+          <a href="{% url 'profile' song.added_by.username %}" style="color:var(--lb-cyan);">{{ song.added_by.username }}</a>
+        {% else %}
+          curator
+        {% endif %}
+        on {{ song.created_at|date:"F j, Y" }}
+      </div>
+    </div>
+
+    <!-- Right Side: Letterboxd Rating Panel & Histogram -->
+    <div class="lb-action-panel">
+      <div class="lb-action-stats">
+        <div>
+          <div class="lb-big-stat">
+            {% if song.avg_rating %}★ {{ song.avg_rating|floatformat:1 }}{% else %}—{% endif %}
+          </div>
+          <div class="lb-big-label">Average Rating</div>
+        </div>
+        <div>
+          <div class="lb-big-stat" style="color:#ffffff;">{{ song.num_ratings }}</div>
+          <div class="lb-big-label">Total Logs</div>
+        </div>
+      </div>
+
+      <!-- User action button -->
+      {% if user.is_authenticated %}
+        {% if user_rating %}
+          <div style="background:#14181c;border:1px solid var(--lb-border);border-radius:var(--radius-xs);padding:0.75rem;margin-bottom:0.75rem;">
+            <div style="font-size:0.7rem;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.25rem;">Your Diary Entry</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <span class="lb-stars" style="font-size:1rem;">{{ user_rating.score_display }}</span>
+              {% if user_rating.liked %}<span class="lb-heart">❤️ Loved</span>{% endif %}
+            </div>
+            {% if user_rating.review %}
+              <p style="font-size:0.75rem;color:var(--text-sub);margin-top:0.4rem;font-style:italic;">"{{ user_rating.review }}"</p>
+            {% endif %}
+          </div>
+          <div style="display:flex;gap:0.5rem;">
+            <a href="{% url 'rate_song' song.pk %}" class="lb-btn-log" style="flex:1;justify-content:center;background:#242f3a;color:#fff;">
+              Edit Log
+            </a>
+            <a href="{% url 'delete_rating' user_rating.pk %}" class="lb-btn-log" style="background:rgba(255,75,75,0.15);color:var(--lb-red);border:1px solid rgba(255,75,75,0.3);" onclick="return confirm('Remove this track from your diary?');">
+              Remove
+            </a>
+          </div>
+        {% else %}
+          <a href="{% url 'rate_song' song.pk %}" class="lb-btn-log" style="width:100%;justify-content:center;" id="btn-log-track">
+            ★ Log or Rate Track
+          </a>
+        {% endif %}
+      {% else %}
+        <a href="{% url 'login' %}?next={{ request.path }}" class="lb-btn-log" style="width:100%;justify-content:center;">
+          Sign in to Rate
+        </a>
+      {% endif %}
+
+      <!-- Letterboxd Rating Distribution Histogram -->
+      <div class="lb-histogram">
+        <div class="lb-histogram-title">Ratings Distribution (0.5 to 5.0)</div>
+        <div class="lb-bars" title="Ratings Distribution">
+          {% for bar in rating_histogram reversed %}
+            <div class="lb-hist-col" title="{{ bar.score }}★: {{ bar.count }} rating{{ bar.count|pluralize }}">
+              <div class="lb-hist-bar" style="height:{% if bar.pct > 0 %}{{ bar.pct }}%{% else %}3px{% endif %};{% if bar.pct == 0 %}background:var(--lb-border);{% endif %}"></div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Community Reviews Section ───────────────────────────── -->
+  <div style="border-top:1px solid var(--lb-border);padding-top:2.5rem;margin-top:2rem;">
+    <div class="lb-section-title">
+      <h2><span>💬</span> Listener Reviews ({{ ratings|length }})</h2>
+    </div>
+
+    {% if ratings %}
+      <div class="lb-review-list">
+        {% for r in ratings %}
+          <div class="lb-review-row" id="review-{{ r.pk }}">
+            <div class="lb-review-main" style="padding-left:0;">
+              <div class="lb-review-top">
+                <a href="{% url 'profile' r.user.username %}" class="lb-review-user" style="font-weight:700;font-size:0.85rem;">
+                  {{ r.user.username }}
+                </a>
+                <span class="lb-stars">{{ r.score_display }}</span>
+                {% if r.liked %}<span class="lb-heart" title="Loved it">❤️</span>{% endif %}
+                <span class="lb-review-date">{{ r.created_at|date:"F j, Y" }}</span>
+              </div>
+
+              {% if r.review %}
+                <div class="lb-review-quote" style="margin-top:0.5rem;font-size:0.85rem;">
+                  "{{ r.review }}"
+                </div>
+              {% else %}
+                <span style="font-size:0.75rem;color:var(--text-muted);font-style:italic;">Logged without written review.</span>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div style="text-align:center;padding:3rem 1rem;background:var(--lb-surface);border:1px solid var(--lb-border);border-radius:var(--radius-sm);">
+        <p style="color:var(--text-sub);font-size:0.85rem;margin-bottom:1rem;">
+          No diary reviews yet for this track.
+        </p>
+        {% if user.is_authenticated %}
+          <a href="{% url 'rate_song' song.pk %}" class="lb-btn-log">Be the first to review</a>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+{% endblock %}
