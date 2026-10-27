@@ -34,8 +34,11 @@ if env_file.exists():
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = "django-insecure-*4hr_!t(d3otl8)679y$w95xyqq3v)l(^)!f53skiqu$kpzqor"
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# On Vercel, enforce DEBUG = False so custom 404 and 500 error pages render
+if os.environ.get("VERCEL"):
+    DEBUG = False
+else:
+    DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1")
 
 ALLOWED_HOSTS = ["*"]
 
