@@ -61,6 +61,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "beats.middleware.RequestLoggingMiddleware",
 ]
 
 ROOT_URLCONF = "sais_app.urls"

@@ -1,0 +1,86 @@
+{% extends "beats/base.html" %}
+
+{% block title %}Support Tickets (SQL Database) — Beats{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:2rem;">
+  <div class="lb-section-title">
+    <h2><span>🎫</span> Support Tickets Directory</h2>
+    <span style="font-size:0.75rem;color:var(--text-muted);font-family:var(--font-mono);">STORED IN SQL DATABASE</span>
+  </div>
+  <p style="color:var(--text-sub);font-size:0.9rem;max-width:650px;">
+    All customer support inquiries, AI assistant escalations, and error reports are tracked in our relational SQL database with status updates.
+  </p>
+</div>
+
+<!-- Ticket Search Bar -->
+<div style="background:var(--lb-surface);border:1px solid var(--lb-border);border-radius:var(--radius-sm);padding:1rem 1.25rem;margin-bottom:2rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;">
+  <form method="GET" action="{% url 'tickets' %}" style="display:flex;gap:0.5rem;flex:1;max-width:400px;">
+    <input type="text" name="ticket_id" class="lb-input" placeholder="Search by Ticket ID (e.g. BEATS-10001)..." value="{{ search_query }}">
+    <button type="submit" class="lb-btn-log">Search</button>
+  </form>
+  <a href="{% url 'faq' %}#faq-support-ticket-form" class="lb-btn-log" style="background:#202830;color:#fff;border:1px solid var(--lb-border);">
+    + Open New Ticket
+  </a>
+</div>
+
+{% if found_ticket %}
+  <div style="background:#18222b;border:1px solid var(--lb-green);border-radius:var(--radius-sm);padding:1.5rem;margin-bottom:2rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+      <span style="font-family:var(--font-mono);font-size:1.1rem;font-weight:800;color:var(--lb-green);">#{{ found_ticket.ticket_id }}</span>
+      <span class="detail-badge-hifi">{{ found_ticket.status }}</span>
+    </div>
+    <h3 style="color:#ffffff;font-size:1.1rem;margin-bottom:0.4rem;">{{ found_ticket.subject }}</h3>
+    <p style="color:var(--text-sub);font-size:0.85rem;line-height:1.5;margin-bottom:0.75rem;">{{ found_ticket.message }}</p>
+    <div style="font-size:0.75rem;color:var(--text-muted);border-top:1px solid var(--lb-border);padding-top:0.5rem;">
+      Opened by {{ found_ticket.email }} on {{ found_ticket.created_at|date:"F j, Y, g:i a" }} via {{ found_ticket.get_source_display }}
+    </div>
+  </div>
+{% endif %}
+
+<!-- Tickets List Table -->
+<div style="background:var(--lb-surface);border:1px solid var(--lb-border);border-radius:var(--radius-sm);overflow:hidden;">
+  <table style="width:100%;border-collapse:collapse;font-size:0.82rem;text-align:left;">
+    <thead>
+      <tr style="background:#14181c;border-bottom:1px solid var(--lb-border);color:var(--text-muted);text-transform:uppercase;font-size:0.7rem;letter-spacing:0.06em;">
+        <th style="padding:0.75rem 1rem;">Ticket ID</th>
+        <th style="padding:0.75rem 1rem;">Subject</th>
+        <th style="padding:0.75rem 1rem;">Source</th>
+        <th style="padding:0.75rem 1rem;">Status</th>
+        <th style="padding:0.75rem 1rem;">Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tickets %}
+        <tr style="border-bottom:1px solid var(--lb-border);">
+          <td style="padding:0.75rem 1rem;font-family:var(--font-mono);font-weight:700;color:var(--lb-cyan);">
+            #{{ t.ticket_id }}
+          </td>
+          <td style="padding:0.75rem 1rem;color:#ffffff;font-weight:600;">
+            {{ t.subject }}
+          </td>
+          <td style="padding:0.75rem 1rem;color:var(--text-muted);">
+            {{ t.get_source_display }}
+          </td>
+          <td style="padding:0.75rem 1rem;">
+            {% if t.status == 'OPEN' %}
+              <span style="color:var(--lb-orange);font-weight:700;">● Open</span>
+            {% elif t.status == 'RESOLVED' %}
+              <span style="color:var(--lb-green);font-weight:700;">✓ Resolved</span>
+            {% else %}
+              <span style="color:var(--lb-cyan);font-weight:700;">⟳ In Progress</span>
+            {% endif %}
+          </td>
+          <td style="padding:0.75rem 1rem;color:var(--text-muted);font-family:var(--font-mono);font-size:0.75rem;">
+            {{ t.created_at|date:"M j, Y" }}
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="5" style="padding:2rem;text-align:center;color:var(--text-muted);">No support tickets found in SQL database.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

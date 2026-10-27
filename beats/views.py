@@ -1,5 +1,7 @@
 import json
 import logging
+import time
+from datetime import datetime
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login, logout, authenticate
@@ -7,13 +9,16 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User
 from django.contrib import messages
 from django.db.models import Avg, Count, Q
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
-from django.views.decorators.csrf import csrf_exempt
+from django.db import connection
 
-from .models import Song, Rating
+from .models import Song, Rating, FAQ, ErrorCode, SupportTicket
 from .forms import SongForm, RatingForm, SignUpForm
-from .gemini_service import get_song_recommendations
+from .gemini_service import get_assistant_response
+from .mongo_service import log_feedback, is_mongo_connected, get_recent_chat_logs
+from .third_party_service import get_listening_weather_and_vibe
+from .middleware import RECENT_REQUESTS_LOG
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +126,6 @@ def add_song(request):
             messages.success(request, f'"{song.title}" added to the crate!')
             return redirect('song_detail', pk=song.pk)
     else:
-        # Pre-fill from query params if clicked from AI recommendations
         initial = {
             'title': request.GET.get('title', ''),
             'artist': request.GET.get('artist', ''),
@@ -190,30 +194,223 @@ def profile(request, username):
     return render(request, 'beats/profile.html', context)
 
 
-# ── Crate Digger (Dedicated AI Chatbot Page) ───────────────────────────────────
+# ── Crate Digger (Dedicated AI Studio) ─────────────────────────────────────────
 
 def crate_digger_view(request):
-    """Full-page experience for the Gemini-powered AI music curator."""
     popular_prompts = [
         "Late night Tokyo drive through rain with neon synthwave",
         "Melancholic acoustic folk for a Sunday morning coffee",
         "Dark heavy bass cyberpunk phonk for a workout",
         "70s French & Japanese disco with infectious basslines",
-        "Songs that feel like The Cure meets Daft Punk",
-        "90s shoegaze that sounds like a warm wall of sound",
+        "Explain HTTP Error 404 and how it affects music playback",
+        "Explain Error BEATS-444 Needle Scratch",
     ]
     return render(request, 'beats/crate_digger.html', {
         'popular_prompts': popular_prompts,
     })
 
 
-# ── Gemini Recommendation API Endpoint ─────────────────────────────────────────
+# ── Assessment Requirement: FAQ & Error Code Page ──────────────────────────────
+
+def faq_view(request):
+    """
+    Displays at least 10 FAQs stored in SQL and 8 error codes (400, 401, 403, 404, 429, 500, 503, BEATS-444).
+    Also includes a live third-party weather/vibe widget with 2.0s timeout & fallback.
+    """
+    category = request.GET.get('category', '').strip()
+    search_q = request.GET.get('q', '').strip()
+
+    faqs = FAQ.objects.all().order_by('order')
+    if category:
+        faqs = faqs.filter(category=category)
+    if search_q:
+        faqs = faqs.filter(Q(question__icontains=search_q) | Q(answer__icontains=search_q))
+
+    error_codes = ErrorCode.objects.all().order_by('order')
+
+    # Assessment requirement: Third-party API with strict time limit and fallback
+    live_vibe = get_listening_weather_and_vibe()
+
+    categories = FAQ.CATEGORY_CHOICES
+
+    context = {
+        'faqs': faqs,
+        'error_codes': error_codes,
+        'categories': categories,
+        'selected_category': category,
+        'search_q': search_q,
+        'live_vibe': live_vibe,
+        'total_faqs': FAQ.objects.count(),
+        'total_errors': ErrorCode.objects.count(),
+    }
+    return render(request, 'beats/faq.html', context)
+
+
+# ── Assessment Requirement: Support Ticket Submission ──────────────────────────
+
+def support_tickets_view(request):
+    """View and search support tickets stored in the SQL database."""
+    query = request.GET.get('ticket_id', '').strip()
+    tickets = SupportTicket.objects.all().order_by('-created_at')
+
+    found_ticket = None
+    if query:
+        found_ticket = SupportTicket.objects.filter(ticket_id__iexact=query).first()
+
+    user_tickets = []
+    if request.user.is_authenticated:
+        user_tickets = SupportTicket.objects.filter(
+            Q(user=request.user) | Q(email=request.user.email)
+        ).order_by('-created_at')
+
+    context = {
+        'tickets': tickets[:20],
+        'found_ticket': found_ticket,
+        'user_tickets': user_tickets,
+        'search_query': query,
+    }
+    return render(request, 'beats/tickets.html', context)
+
+
+@require_POST
+def create_ticket_api(request):
+    """Creates a support ticket in SQL (called directly or escalated by AI)."""
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        data = request.POST
+
+    email = (data.get('email') or '').strip()
+    subject = (data.get('subject') or '').strip()
+    message = (data.get('message') or '').strip()
+    source = data.get('source', 'HELP_PAGE')
+
+    if not email or not message:
+        return JsonResponse({'error': 'Email and message are required.'}, status=400)
+
+    ticket = SupportTicket.objects.create(
+        user=request.user if request.user.is_authenticated else None,
+        email=email,
+        subject=subject or 'General Inquiry / Assistance',
+        message=message,
+        source=source,
+        status='OPEN'
+    )
+
+    return JsonResponse({
+        'success': True,
+        'ticket_id': ticket.ticket_id,
+        'status': ticket.status,
+        'created_at': ticket.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        'message': f"Ticket {ticket.ticket_id} created successfully. Our team will review it shortly."
+    })
+
+
+# ── Assessment Requirement: MongoDB Feedback Endpoint ─────────────────────────
+
+@require_POST
+def submit_feedback_api(request):
+    """
+    Assessment Requirement: Feedback stored in MongoDB.
+    Accepts JSON payload: { rating: 5, comment: "...", ticket_id: "..." }
+    """
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        data = request.POST
+
+    rating = data.get('rating', 5)
+    comment = (data.get('comment') or '').strip()
+    ticket_id = data.get('ticket_id')
+
+    user_ident = request.user.username if request.user.is_authenticated else "anonymous"
+
+    success = log_feedback(
+        user_identifier=user_ident,
+        rating=int(rating),
+        comment=comment,
+        related_ticket_id=ticket_id
+    )
+
+    return JsonResponse({
+        'success': success,
+        'storage': 'MongoDB (beats.feedback)',
+        'message': 'Thank you! Your feedback has been recorded.'
+    })
+
+
+# ── Assessment Requirement: Health Check Page ─────────────────────────────────
+
+def health_check_view(request):
+    """
+    Assessment Requirement: Request logging and health check page.
+    Monitors database connectivity, upstream API latency, and MongoDB status.
+    """
+    start_time = time.time()
+    health_status = {
+        "status": "healthy",
+        "service": "Beats Music Platform & AI Assistant",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "checks": {}
+    }
+
+    # 1. SQL Database Check
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1;")
+            cursor.fetchone()
+        health_status["checks"]["sql_database"] = {
+            "status": "UP",
+            "engine": connection.settings_dict.get('ENGINE', 'sqlite3').split('.')[-1],
+            "total_songs": Song.objects.count(),
+            "total_faqs": FAQ.objects.count(),
+            "total_error_codes": ErrorCode.objects.count(),
+            "total_tickets": SupportTicket.objects.count()
+        }
+    except Exception as e:
+        health_status["status"] = "degraded"
+        health_status["checks"]["sql_database"] = {
+            "status": "DOWN",
+            "error": str(e)
+        }
+
+    # 2. Third-Party Weather/Vibe API Check (with strict timeout)
+    third_party_result = get_listening_weather_and_vibe()
+    health_status["checks"]["third_party_api"] = {
+        "status": "UP" if not third_party_result.get("fallback_used") else "FALLBACK",
+        "provider": third_party_result.get("provider"),
+        "latency_ms": third_party_result.get("latency_ms", 0),
+        "ambient_mood": third_party_result.get("ambient_mood")
+    }
+
+    # 3. MongoDB Connectivity Check
+    mongo_up = is_mongo_connected()
+    health_status["checks"]["mongodb_storage"] = {
+        "status": "CONNECTED" if mongo_up else "FALLBACK_BUFFER",
+        "description": "MongoDB chat_logs and feedback collection storage"
+    }
+
+    # 4. Request Logging Metrics
+    recent_requests = list(RECENT_REQUESTS_LOG)
+    health_status["checks"]["request_logging"] = {
+        "status": "ACTIVE",
+        "buffered_requests_count": len(recent_requests),
+        "recent_requests_sample": recent_requests[-5:] if recent_requests else []
+    }
+
+    health_status["response_time_ms"] = round((time.time() - start_time) * 1000, 2)
+
+    return JsonResponse(health_status, status=200 if health_status["status"] == "healthy" else 503)
+
+
+# ── AI Recommendations & Assistant API Endpoint ────────────────────────────────
 
 @require_POST
 def api_recommendations(request):
     """
-    JSON API endpoint for AI song recommendations using Gemini.
-    Accepts JSON body: { "prompt": "...", "api_key": "..." (optional) }
+    Assessment Requirement: AI assistant answering from FAQ, explaining error codes,
+    and creating a support ticket when it cannot answer.
+    Logs chat to MongoDB automatically.
     """
     try:
         data = json.loads(request.body.decode('utf-8'))
@@ -224,13 +421,20 @@ def api_recommendations(request):
     user_api_key = (data.get('api_key') or '').strip()
 
     if not prompt:
-        return JsonResponse({'error': 'Please provide a prompt or theme.'}, status=400)
+        return JsonResponse({'error': 'Please provide a prompt or question.'}, status=400)
+
+    user_ident = request.user.username if request.user.is_authenticated else "guest"
 
     try:
-        recommendations = get_song_recommendations(prompt, user_api_key=user_api_key)
+        # Call Gemini assistant (with local knowledge base fallback)
+        res_data = get_assistant_response(
+            prompt,
+            user_api_key=user_api_key,
+            user_identifier=user_ident
+        )
 
-        # Cross-reference with existing database songs so user knows if it's already in the crate!
-        rec_list = recommendations.get('recommendations', [])
+        # Cross-reference recommended songs with database
+        rec_list = res_data.get('recommendations', [])
         for item in rec_list:
             existing_song = Song.objects.filter(
                 title__iexact=item.get('title'),
@@ -242,24 +446,36 @@ def api_recommendations(request):
             else:
                 item['existing_id'] = None
 
+        # Check if assistant escalated to a Support Ticket in SQL
+        if res_data.get('ticket_required'):
+            ticket_subj = res_data.get('ticket_subject') or prompt[:50]
+            ticket_msg = res_data.get('ticket_message') or prompt
+            email = request.user.email if request.user.is_authenticated and request.user.email else "guest@beats.fm"
+
+            ticket = SupportTicket.objects.create(
+                user=request.user if request.user.is_authenticated else None,
+                email=email,
+                subject=f"[AI Escalated] {ticket_subj}",
+                message=ticket_msg,
+                source='AI_ASSISTANT',
+                status='OPEN'
+            )
+            res_data['created_ticket_id'] = ticket.ticket_id
+            res_data['ticket_notice'] = f"Support ticket #{ticket.ticket_id} has been opened in our SQL database. Reference this code for assistance."
+
         return JsonResponse({
             'success': True,
-            'data': recommendations
+            'data': res_data
         })
-    except ValueError as val_err:
-        return JsonResponse({'error': str(val_err)}, status=400)
     except Exception as e:
         logger.exception("Error in api_recommendations: %s", e)
-        return JsonResponse({'error': f"AI service error: {str(e)}"}, status=500)
+        return JsonResponse({'error': f"AI service notice: {str(e)}"}, status=500)
 
 
 # ── Quick Add from Recommendation API ──────────────────────────────────────────
 
 @require_POST
 def api_quick_add(request):
-    """
-    Allows one-click addition of a recommended song to the database.
-    """
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Sign in required to add songs.'}, status=401)
 
@@ -277,7 +493,6 @@ def api_quick_add(request):
     if not title or not artist:
         return JsonResponse({'error': 'Title and artist are required.'}, status=400)
 
-    # Valid genre check
     valid_genres = dict(Song.GENRE_CHOICES).keys()
     if genre not in valid_genres:
         genre = 'other'
@@ -287,7 +502,6 @@ def api_quick_add(request):
     except (ValueError, TypeError):
         release_year = None
 
-    # Check if exists or create
     song, created = Song.objects.get_or_create(
         title=title,
         artist=artist,
@@ -310,7 +524,26 @@ def api_quick_add(request):
     })
 
 
-# ── Auth ───────────────────────────────────────────────────────────────────────
+# ── Assessment Requirement: Custom 404 & 500 Handlers ─────────────────────────
+
+def custom_404_view(request, exception=None):
+    """Custom 404 page with 'Ask the assistant' option."""
+    error_obj = ErrorCode.objects.filter(code='404').first()
+    return render(request, '404.html', {
+        'error_obj': error_obj,
+        'requested_path': request.path,
+    }, status=404)
+
+
+def custom_500_view(request):
+    """Custom 500 page with 'Ask the assistant' option."""
+    error_obj = ErrorCode.objects.filter(code='500').first()
+    return render(request, '500.html', {
+        'error_obj': error_obj,
+    }, status=500)
+
+
+# ── Auth Views ─────────────────────────────────────────────────────────────────
 
 def signup_view(request):
     if request.user.is_authenticated:

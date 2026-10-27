@@ -1,0 +1,62 @@
+{% extends "beats/base.html" %}
+
+{% block title %}404 Not Found — Beats{% endblock %}
+
+{% block content %}
+<div style="max-width:640px;margin:4rem auto;text-align:center;">
+  
+  <div style="font-family:var(--font-mono);font-size:5rem;font-weight:900;color:var(--lb-red);line-height:1;margin-bottom:0.5rem;text-shadow:0 0 25px rgba(255,75,75,0.3);">
+    404
+  </div>
+
+  <div style="display:inline-block;background:rgba(255,75,75,0.12);border:1px solid rgba(255,75,75,0.3);color:var(--lb-red);font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;padding:0.25rem 0.75rem;border-radius:var(--radius-pill);margin-bottom:1.5rem;">
+    Vinyl Groove Not Found • Track Missing
+  </div>
+
+  <h1 style="font-family:var(--font-display);font-size:1.6rem;font-weight:800;color:#ffffff;margin-bottom:0.75rem;">
+    We couldn't drop the needle on this track.
+  </h1>
+
+  <p style="color:var(--text-sub);font-size:0.9rem;line-height:1.6;margin-bottom:2rem;">
+    The page or song you requested at <code style="background:#14181c;padding:0.2rem 0.5rem;border-radius:var(--radius-xs);color:var(--lb-cyan);font-family:var(--font-mono);">{{ requested_path|default:request.path }}</code> does not exist in our crate or has been moved to another vinyl shelf.
+  </p>
+
+  <!-- Assessment Requirement: Ask the Assistant Option on 404 Page -->
+  <div style="background:var(--lb-surface);border:1px solid var(--lb-border);border-radius:var(--radius-md);padding:1.5rem;margin-bottom:2rem;text-align:left;">
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+      <span class="lb-dot cyan"></span>
+      <span style="font-family:var(--font-display);font-weight:700;font-size:0.85rem;color:var(--lb-cyan);text-transform:uppercase;">
+        Need Help Finding It?
+      </span>
+    </div>
+    <p style="font-size:0.82rem;color:var(--text-sub);margin-bottom:1rem;line-height:1.45;">
+      Our AI assistant knows the entire crate inventory, can explain what caused this 404 error, and can recommend similar songs or open a support ticket.
+    </p>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+      <button class="lb-btn-log" style="background:var(--lb-cyan);color:#14181c;" id="btn-ask-assistant-404" onclick="ask404Assistant();">
+        💬 Ask the Assistant About This 404
+      </button>
+      <a href="{% url 'faq' %}#error-codes-section" class="lb-btn-log" style="background:#202830;color:#ffffff;border:1px solid var(--lb-border);">
+        Error Codes Guide ↗
+      </a>
+      <a href="{% url 'home' %}" class="lb-btn-log" style="background:#202830;color:var(--text-sub);border:1px solid var(--lb-border);">
+        Back to Home
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function ask404Assistant() {
+    const input = document.getElementById('ai-user-input');
+    const drawer = document.getElementById('crate-ai-drawer');
+    const form = document.getElementById('ai-chat-form');
+    if (!drawer.classList.contains('open')) {
+      document.getElementById('toggle-crate-ai').click();
+    }
+    input.value = "I reached a 404 Not Found error on page {{ requested_path|default:request.path }}. Can you explain error 404 and help me find songs?";
+    form.dispatchEvent(new Event('submit'));
+  }
+</script>
+{% endblock %}

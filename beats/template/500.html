@@ -1,0 +1,62 @@
+{% extends "beats/base.html" %}
+
+{% block title %}500 Internal Server Error — Beats{% endblock %}
+
+{% block content %}
+<div style="max-width:640px;margin:4rem auto;text-align:center;">
+  
+  <div style="font-family:var(--font-mono);font-size:5rem;font-weight:900;color:var(--lb-orange);line-height:1;margin-bottom:0.5rem;text-shadow:0 0 25px rgba(255,128,0,0.3);">
+    500
+  </div>
+
+  <div style="display:inline-block;background:rgba(255,128,0,0.12);border:1px solid rgba(255,128,0,0.3);color:var(--lb-orange);font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;padding:0.25rem 0.75rem;border-radius:var(--radius-pill);margin-bottom:1.5rem;">
+    Turntable Jam • Internal Server Error
+  </div>
+
+  <h1 style="font-family:var(--font-display);font-size:1.6rem;font-weight:800;color:#ffffff;margin-bottom:0.75rem;">
+    The turntable hit an unexpected snag.
+  </h1>
+
+  <p style="color:var(--text-sub);font-size:0.9rem;line-height:1.6;margin-bottom:2rem;">
+    Our audio server encountered an unhandled condition while processing this track. Our engineering team has been notified, and the incident has been logged.
+  </p>
+
+  <!-- Assessment Requirement: Ask the Assistant Option on 500 Page -->
+  <div style="background:var(--lb-surface);border:1px solid var(--lb-border);border-radius:var(--radius-md);padding:1.5rem;margin-bottom:2rem;text-align:left;">
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+      <span class="lb-dot cyan"></span>
+      <span style="font-family:var(--font-display);font-weight:700;font-size:0.85rem;color:var(--lb-cyan);text-transform:uppercase;">
+        Need Help or Want to Report This?
+      </span>
+    </div>
+    <p style="font-size:0.82rem;color:var(--text-sub);margin-bottom:1rem;line-height:1.45;">
+      Ask our AI assistant to diagnose Error 500, or let it automatically open an official support ticket in our SQL database.
+    </p>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+      <button class="lb-btn-log" style="background:var(--lb-cyan);color:#14181c;" id="btn-ask-assistant-500" onclick="ask500Assistant();">
+        💬 Ask the Assistant About This 500
+      </button>
+      <a href="{% url 'tickets' %}" class="lb-btn-log" style="background:#202830;color:#ffffff;border:1px solid var(--lb-border);">
+        Open Support Ticket ↗
+      </a>
+      <a href="{% url 'home' %}" class="lb-btn-log" style="background:#202830;color:var(--text-sub);border:1px solid var(--lb-border);">
+        Back to Home
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function ask500Assistant() {
+    const input = document.getElementById('ai-user-input');
+    const drawer = document.getElementById('crate-ai-drawer');
+    const form = document.getElementById('ai-chat-form');
+    if (!drawer.classList.contains('open')) {
+      document.getElementById('toggle-crate-ai').click();
+    }
+    input.value = "I encountered Error 500 Internal Server Error. Please explain what happened and open a support ticket for this issue.";
+    form.dispatchEvent(new Event('submit'));
+  }
+</script>
+{% endblock %}

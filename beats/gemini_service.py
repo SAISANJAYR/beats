@@ -1,7 +1,9 @@
+import os
 import json
 import logging
 import requests
 from django.conf import settings
+from .mongo_service import log_chat_interaction
 
 logger = logging.getLogger(__name__)
 
@@ -11,52 +13,98 @@ GEMINI_MODELS = [
     "gemini-1.5-flash",
 ]
 
-SYSTEM_PROMPT = """You are "Crate Digger", the resident music curator and vinyl savant for Beats (a Letterboxd-style social platform for songs).
-Your taste is impeccable, warm, authentic, and deep. You talk like an experienced indie record shop owner who has listened to every obscure vinyl and chart-topper alike.
 
-When a user gives you a mood, theme, scenario, or genre prompt:
-1. Provide a short, stylish opening comment (1-2 sentences) capturing the vibe.
-2. Recommend 4 to 5 specific songs that perfectly capture that prompt.
-3. For each song, provide:
-   - title: Song title (accurate name)
-   - artist: Artist name
-   - album: Album name (or Single)
-   - year: Release year (integer)
-   - genre: Main genre (e.g. 'rock', 'hiphop', 'rnb', 'electronic', 'jazz', 'pop', 'other')
-   - vibe_tag: A 2-4 word punchy musical detail (e.g. 'Warm 70s Rhodes & Tape Hiss', 'Distorted 808s • 140 BPM', 'Shimmering Chorus Guitars')
-   - review: 1-2 sentences of vivid music commentary explaining why this track is essential for the prompt.
-4. Output your response strictly as valid JSON in this exact structure:
-{
-  "intro": "Short conversational line setting the tone.",
+def build_system_context():
+    """
+    Dynamically loads all FAQs and ErrorCodes from the SQL database
+    to provide authoritative context to the AI assistant.
+    """
+    from .models import FAQ, ErrorCode
+
+    faq_snippets = []
+    try:
+        for f in FAQ.objects.all().order_by('order'):
+            faq_snippets.append(f"Q: {f.question}\nA: {f.answer}")
+    except Exception as e:
+        logger.warning("Could not load FAQs for AI context: %s", e)
+
+    error_snippets = []
+    try:
+        for err in ErrorCode.objects.all().order_by('order'):
+            site_tag = "[Site-Specific]" if err.is_site_specific else "[HTTP Standard]"
+            error_snippets.append(
+                f"Code: {err.code} ({err.name}) {site_tag}\n"
+                f"Explanation: {err.explanation}\n"
+                f"Resolution: {err.solution}"
+            )
+    except Exception as e:
+        logger.warning("Could not load ErrorCodes for AI context: %s", e)
+
+    faq_text = "\n\n".join(faq_snippets)
+    error_text = "\n\n".join(error_snippets)
+
+    system_prompt = f"""You are "Crate Digger", the AI assistant and resident music savant for Beats (a Letterboxd-style social diary for music and songs).
+
+Your responsibilities:
+1. SONG RECOMMENDATIONS: When asked for music recommendations based on a theme, mood, scene, or genre, recommend 3-5 curated tracks with titles, artists, albums, release years, vibe tags, and vivid music criticism notes.
+2. FAQ & PLATFORM SUPPORT: Answer questions about Beats using the knowledge base below.
+3. ERROR CODE EXPLANATIONS: Accurately explain standard HTTP error codes (400, 401, 403, 404, 429, 500, 503) and our site-specific code BEATS-444 using the error dictionary below.
+4. SUPPORT TICKET ESCALATION: If the user has an account issue, bug report, asks for human support, or if you cannot answer their request, set "ticket_required": true with a suggested subject and summary so an official SQL Support Ticket can be created.
+
+=== SQL FAQ KNOWLEDGE BASE ===
+{faq_text}
+
+=== SQL ERROR CODES DIRECTORY ===
+{error_text}
+
+=== RESPONSE FORMAT ===
+Always return your response strictly as valid JSON matching this schema:
+{{
+  "intro": "Conversational, stylish opening remark (1-2 sentences)",
+  "text_response": "Clear explanation of the question, error code, or topic (if applicable)",
   "recommendations": [
-    {
+    {{
       "title": "Song Title",
       "artist": "Artist Name",
       "album": "Album Name",
       "year": 1999,
-      "genre": "electronic",
-      "vibe_tag": "Ambient Synths & Sub Bass",
-      "review": "Why it hits so hard..."
-    }
+      "genre": "rock",
+      "vibe_tag": "Analog Tape & 90s Crunch",
+      "review": "Brief note on why it fits the vibe..."
+    }}
   ],
-  "outro": "A brief parting quip encouraging them to log and rate what they heard on Beats."
-}
-
-Do not wrap in anything other than JSON (no extraneous text outside the JSON block).
+  "ticket_required": false,
+  "ticket_subject": null,
+  "ticket_message": null,
+  "outro": "Friendly closing note."
+}}
 """
+    return system_prompt
 
 
-def get_song_recommendations(prompt: str, user_api_key: str = None) -> dict:
+def get_assistant_response(prompt: str, user_api_key: str = None, user_identifier: str = "guest") -> dict:
     """
-    Calls Google Gemini API to get curated song recommendations for a given prompt/theme.
-    Returns parsed dictionary or raises ValueError with user-friendly message.
+    Calls Google Gemini with the grounded SQL knowledge base.
+    Auto-detects API key from environment (zero user friction).
+    Falls back gracefully if the API is unreachable or key is missing.
     """
-    api_key = (user_api_key or getattr(settings, 'GEMINI_API_KEY', '') or '').strip()
+    # Prefer server environment variable first, then settings, then client
+    api_key = (
+        os.environ.get("GEMINI_API_KEY") or
+        getattr(settings, "GEMINI_API_KEY", "") or
+        os.environ.get("GOOGLE_API_KEY") or
+        user_api_key or
+        ""
+    ).strip()
+
+    # If no key configured, engage our local semantic rule-based assistant
     if not api_key:
-        raise ValueError(
-            "Gemini API Key is missing. Please provide your Gemini API key in the chat settings or set GEMINI_API_KEY in your environment."
-        )
+        logger.info("No Gemini API key set; using built-in knowledge base assistant.")
+        fallback_resp = generate_local_knowledge_response(prompt)
+        log_chat_interaction(user_identifier, prompt, fallback_resp, model_used="local-knowledge-engine")
+        return fallback_resp
 
+    system_prompt = build_system_context()
     last_error = None
 
     for model_name in GEMINI_MODELS:
@@ -66,55 +114,135 @@ def get_song_recommendations(prompt: str, user_api_key: str = None) -> dict:
             "contents": [
                 {
                     "parts": [
-                        {
-                            "text": f"{SYSTEM_PROMPT}\n\nUSER PROMPT / THEME:\n\"{prompt}\""
-                        }
+                        {"text": f"{system_prompt}\n\nUSER QUERY:\n\"{prompt}\""}
                     ]
                 }
             ],
             "generationConfig": {
-                "temperature": 0.75,
+                "temperature": 0.7,
                 "topP": 0.95,
                 "responseMimeType": "application/json"
             }
         }
 
         try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=20)
+            resp = requests.post(url, headers=headers, json=payload, timeout=15)
             if resp.status_code == 200:
                 data = resp.json()
-                try:
-                    candidates = data.get("candidates", [])
-                    if not candidates:
-                        raise ValueError("No candidates returned from Gemini.")
-                    text = candidates[0]["content"]["parts"][0]["text"]
-                    # Clean markdown code block if present
-                    text = text.strip()
-                    if text.startswith("```json"):
-                        text = text[7:]
-                    if text.startswith("```"):
-                        text = text[3:]
-                    if text.endswith("```"):
-                        text = text[:-3]
-                    parsed = json.loads(text.strip())
-                    return parsed
-                except Exception as parse_err:
-                    logger.warning("Failed to parse JSON from Gemini response: %s", parse_err)
-                    # Try next or format text fallback
-                    return {
-                        "intro": "Here are some handpicked tracks from the crates:",
-                        "recommendations": [],
-                        "raw_text": candidates[0]["content"]["parts"][0].get("text", ""),
-                        "outro": "Log your favorites on Beats!"
-                    }
+                candidates = data.get("candidates", [])
+                if not candidates:
+                    continue
+
+                text = candidates[0]["content"]["parts"][0]["text"].strip()
+                if text.startswith("```json"):
+                    text = text[7:]
+                if text.startswith("```"):
+                    text = text[3:]
+                if text.endswith("```"):
+                    text = text[:-3]
+
+                parsed = json.loads(text.strip())
+
+                # Log into MongoDB
+                log_chat_interaction(user_identifier, prompt, parsed, model_used=model_name)
+                return parsed
+
             elif resp.status_code in (404, 400) and "not found" in resp.text.lower():
                 last_error = resp.text
                 continue
-            elif resp.status_code == 400 and "API_KEY_INVALID" in resp.text:
-                raise ValueError("Your Gemini API key appears to be invalid. Please double-check your key at Google AI Studio.")
             else:
-                last_error = f"Gemini API returned status {resp.status_code}: {resp.text}"
-        except requests.RequestException as e:
+                last_error = f"Gemini status {resp.status_code}: {resp.text}"
+        except Exception as e:
             last_error = str(e)
+            logger.warning("Gemini model %s error: %s", model_name, e)
 
-    raise ValueError(f"Failed to generate recommendations: {last_error or 'Could not connect to Gemini'}")
+    # If all upstream models failed, use local knowledge base fallback so user never gets broken UX
+    logger.warning("Falling back to local knowledge base after Gemini failure: %s", last_error)
+    fallback_resp = generate_local_knowledge_response(prompt)
+    log_chat_interaction(user_identifier, prompt, fallback_resp, model_used="local-fallback-engine")
+    return fallback_resp
+
+
+def generate_local_knowledge_response(prompt: str) -> dict:
+    """
+    Local knowledge engine: parses FAQs, Error Codes, and prompts directly
+    from the SQL database when Gemini is offline or unconfigured.
+    """
+    from .models import FAQ, ErrorCode
+    p_lower = prompt.lower()
+
+    # 1. Check for error code query (e.g. 404, 500, beats-444, "error 429")
+    for err in ErrorCode.objects.all():
+        if err.code.lower() in p_lower or err.name.lower() in p_lower:
+            return {
+                "intro": f"Here is the breakdown for error {err.code}:",
+                "text_response": f"**{err.code} — {err.name}**\n\n**What it means:** {err.explanation}\n\n**How to resolve it:** {err.solution}",
+                "recommendations": [],
+                "ticket_required": False,
+                "outro": "Need more help with this error? Just reply 'open a support ticket'."
+            }
+
+    # 2. Check for FAQ match
+    for faq in FAQ.objects.all():
+        words = [w for w in faq.question.lower().split() if len(w) > 3]
+        if any(w in p_lower for w in words):
+            return {
+                "intro": "I found an answer in the Beats Knowledge Base:",
+                "text_response": f"**Q: {faq.question}**\n\n{faq.answer}",
+                "recommendations": [],
+                "ticket_required": False,
+                "outro": "Let me know if you need any additional clarification!"
+            }
+
+    # 3. Check for support ticket request
+    if any(k in p_lower for k in ["ticket", "support", "help", "human", "contact", "bug", "broken", "locked"]):
+        return {
+            "intro": "I can certainly create an official support ticket for you.",
+            "text_response": "I've flagged this for our support team. An official support ticket will be generated in our SQL database.",
+            "recommendations": [],
+            "ticket_required": True,
+            "ticket_subject": prompt[:60],
+            "ticket_message": prompt,
+            "outro": "Your support ticket reference will be saved to your dashboard."
+        }
+
+    # 4. Default Music Curation response
+    return {
+        "intro": "Here are some classic selections from the Beats vinyl vault:",
+        "text_response": "I've matched your request against our offline curated vinyl collection.",
+        "recommendations": [
+            {
+                "title": "Dreams",
+                "artist": "Fleetwood Mac",
+                "album": "Rumours",
+                "year": 1977,
+                "genre": "rock",
+                "vibe_tag": "Warm 70s Acoustic • Analog Tape",
+                "review": "A masterclass in subtle rhythm and acoustic guitars."
+            },
+            {
+                "title": "Get Lucky",
+                "artist": "Daft Punk",
+                "album": "Random Access Memories",
+                "year": 2013,
+                "genre": "electronic",
+                "vibe_tag": "Disco Funk • Nile Rodgers Riff",
+                "review": "Irresistible grooves recorded with state-of-the-art analog gear."
+            },
+            {
+                "title": "So What",
+                "artist": "Miles Davis",
+                "album": "Kind of Blue",
+                "year": 1959,
+                "genre": "jazz",
+                "vibe_tag": "Modal Jazz • Late Night Mood",
+                "review": "The quintessential late-night listening experience."
+            }
+        ],
+        "ticket_required": False,
+        "outro": "Log these tracks to your Beats diary or ask about any error code!"
+    }
+
+
+# Backwards compatibility alias
+get_song_recommendations = get_assistant_response

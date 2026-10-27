@@ -22,3 +22,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("beats.urls")),
 ]
+
+handler404 = 'beats.views.custom_404_view'
+handler500 = 'beats.views.custom_500_view'
+

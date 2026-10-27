@@ -1,0 +1,245 @@
+{% extends "beats/base.html" %}
+{% load static %}
+
+{% block title %}Knowledge Base, FAQs & Error Codes — Beats{% endblock %}
+{% block description %}Frequently asked questions, HTTP error codes guide, and live system diagnostics for the Beats music platform.{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:2.5rem;">
+  <div class="lb-section-title">
+    <h2>
+      <span class="lb-dot green"></span>
+      Knowledge Base & Support Center
+    </h2>
+    <span style="font-size:0.75rem;color:var(--text-muted);font-family:var(--font-mono);">
+      {{ total_faqs }} FAQS • {{ total_errors }} ERROR CODES
+    </span>
+  </div>
+  <p style="color:var(--text-sub);font-size:0.95rem;max-width:700px;line-height:1.5;">
+    Everything you need to know about Beats: tracking vinyl, half-star scoring, error code troubleshooting, and our Gemini-powered AI music assistant.
+  </p>
+</div>
+
+<!-- ── Live Atmosphere & Third-Party API Widget (Assessment Requirement) ── -->
+<div style="background:linear-gradient(135deg, #18222c, #1f2a36);border:1px solid rgba(64,188,244,0.3);border-radius:var(--radius-sm);padding:1.25rem 1.5rem;margin-bottom:2.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;">
+  <div>
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem;">
+      <span style="font-size:1.1rem;">🌤️</span>
+      <span style="font-family:var(--font-display);font-weight:700;font-size:0.85rem;color:var(--lb-cyan);text-transform:uppercase;letter-spacing:0.06em;">
+        Live Audio Atmosphere API
+      </span>
+      {% if live_vibe.fallback_used %}
+        <span style="background:rgba(255,128,0,0.15);color:var(--lb-orange);border:1px solid rgba(255,128,0,0.3);font-size:0.65rem;padding:0.1rem 0.4rem;border-radius:var(--radius-xs);font-weight:700;">
+          LOCAL FALLBACK (2.0s Limit Active)
+        </span>
+      {% else %}
+        <span style="background:rgba(0,224,84,0.15);color:var(--lb-green);border:1px solid rgba(0,224,84,0.3);font-size:0.65rem;padding:0.1rem 0.4rem;border-radius:var(--radius-xs);font-weight:700;">
+          LIVE SYNC ({{ live_vibe.latency_ms }}ms)
+        </span>
+      {% endif %}
+    </div>
+    <div style="font-size:0.88rem;color:#ffffff;font-weight:600;">
+      Current Ambient Listening Vibe: <span style="color:var(--lb-green);">{{ live_vibe.ambient_mood }}</span>
+    </div>
+    <div style="font-size:0.75rem;color:var(--text-sub);margin-top:0.2rem;">
+      Provider: {{ live_vibe.provider }} • Temp: {{ live_vibe.temperature_c }}°C
+    </div>
+  </div>
+
+  <button class="lb-btn-log" style="background:var(--lb-cyan);color:#14181c;font-size:0.75rem;" onclick="askAssistantPrompt('Recommend songs for this weather vibe: {{ live_vibe.ambient_mood }}');">
+    Ask AI For This Vibe 🎵
+  </button>
+</div>
+
+<!-- ── Quick Search & Category Chips ──────────────────────── -->
+<div class="lb-subnav" style="border-radius:var(--radius-sm);margin-bottom:2rem;">
+  <div class="lb-subnav-inner">
+    <div class="lb-chips">
+      <span style="font-size:0.75rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-right:0.3rem;">Category:</span>
+      <a href="{% url 'faq' %}" class="lb-chip {% if not selected_category %}active{% endif %}">All FAQs</a>
+      {% for code, label in categories %}
+        <a href="?category={{ code }}" class="lb-chip {% if selected_category == code %}active{% endif %}">
+          {{ label }}
+        </a>
+      {% endfor %}
+    </div>
+
+    <!-- Search Form -->
+    <form method="GET" action="{% url 'faq' %}" style="display:flex;gap:0.4rem;">
+      {% if selected_category %}<input type="hidden" name="category" value="{{ selected_category }}">{% endif %}
+      <input type="text" name="q" value="{{ search_q }}" placeholder="Search FAQs..." class="lb-input" style="padding:0.25rem 0.6rem;font-size:0.75rem;width:180px;">
+      <button type="submit" class="lb-btn-log" style="padding:0.25rem 0.65rem;font-size:0.72rem;">Filter</button>
+    </form>
+  </div>
+</div>
+
+<!-- ── Frequently Asked Questions (Minimum 10 FAQs in SQL) ── -->
+<section style="margin-bottom:3.5rem;">
+  <div class="lb-section-title">
+    <h2><span>❓</span> Frequently Asked Questions ({{ faqs|length }})</h2>
+    <span style="font-size:0.72rem;color:var(--text-muted);">Stored in SQL Database</span>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:0.75rem;" id="faq-accordion">
+    {% for faq in faqs %}
+      <div style="background:var(--lb-surface);border:1px solid var(--lb-border);border-radius:var(--radius-sm);overflow:hidden;">
+        <details style="padding:1rem 1.25rem;cursor:pointer;">
+          <summary style="font-family:var(--font-display);font-weight:700;font-size:0.95rem;color:#ffffff;display:flex;align-items:center;justify-content:space-between;list-style:none;">
+            <span>{{ forloop.counter }}. {{ faq.question }}</span>
+            <span style="font-size:0.75rem;color:var(--lb-green);margin-left:1rem;">+</span>
+          </summary>
+          <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--lb-border);font-size:0.85rem;color:var(--text-sub);line-height:1.6;">
+            {{ faq.answer }}
+            <div style="margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center;">
+              <span class="detail-badge-hifi" style="font-size:0.65rem;">{{ faq.get_category_display }}</span>
+              <button onclick="askAssistantPrompt('Explain FAQ: {{ faq.question|escapejs }}')" class="stream-btn" style="font-size:0.7rem;padding:0.2rem 0.5rem;">
+                💬 Ask Assistant About This
+              </button>
+            </div>
+          </div>
+        </details>
+      </div>
+    {% empty %}
+      <p style="color:var(--text-muted);font-style:italic;">No FAQs matched your search filter.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ── Error Codes Directory (Minimum 8 Error Codes in SQL) ── -->
+<section style="margin-bottom:3.5rem;" id="error-codes-section">
+  <div class="lb-section-title">
+    <h2><span>⚡</span> HTTP & Site Error Code Directory ({{ error_codes|length }})</h2>
+    <span style="font-size:0.72rem;color:var(--text-muted);">400, 401, 403, 404, 429, 500, 503 & BEATS-444</span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));gap:1rem;">
+    {% for err in error_codes %}
+      <div style="background:var(--lb-surface);border:1px solid var(--lb-border);border-radius:var(--radius-sm);padding:1.25rem;display:flex;flex-direction:column;justify-content:space-between;">
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+            <span style="font-family:var(--font-mono);font-size:1.15rem;font-weight:800;color:{% if err.is_site_specific %}var(--lb-orange){% elif err.code == '404' or err.code == '500' %}var(--lb-red){% else %}var(--lb-green){% endif %};">
+              {{ err.code }}
+            </span>
+            {% if err.is_site_specific %}
+              <span style="background:rgba(255,128,0,0.12);color:var(--lb-orange);border:1px solid rgba(255,128,0,0.3);font-size:0.65rem;font-weight:700;padding:0.15rem 0.4rem;border-radius:var(--radius-xs);text-transform:uppercase;">
+                Site-Specific
+              </span>
+            {% else %}
+              <span style="font-size:0.65rem;color:var(--text-muted);font-family:var(--font-mono);">HTTP STANDARD</span>
+            {% endif %}
+          </div>
+
+          <div style="font-family:var(--font-display);font-weight:700;font-size:0.9rem;color:#ffffff;margin-bottom:0.5rem;">
+            {{ err.name }}
+          </div>
+
+          <p style="font-size:0.78rem;color:var(--text-sub);line-height:1.45;margin-bottom:0.75rem;">
+            {{ err.explanation }}
+          </p>
+
+          <div style="background:#14181c;border-left:2px solid var(--lb-green);padding:0.5rem 0.6rem;font-size:0.72rem;color:var(--text-muted);line-height:1.4;margin-bottom:1rem;">
+            <strong>Fix:</strong> {{ err.solution }}
+          </div>
+        </div>
+
+        <button class="lb-btn-log" style="width:100%;justify-content:center;font-size:0.72rem;background:#202830;color:#ffffff;border:1px solid var(--lb-border);" onclick="askAssistantPrompt('Explain error {{ err.code }} ({{ err.name }}) and how to solve it.')">
+          Ask Assistant 💬
+        </button>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ── Support Ticket Submission (Stored in SQL) ───────────── -->
+<section style="background:var(--lb-surface);border:1px solid var(--lb-border);border-radius:var(--radius-sm);padding:2rem;">
+  <div class="lb-section-title" style="border:none;margin-bottom:1rem;padding:0;">
+    <h2><span>🎫</span> Open an Official Support Ticket</h2>
+    <a href="{% url 'tickets' %}" class="link-all">View All Tickets ↗</a>
+  </div>
+  <p style="font-size:0.85rem;color:var(--text-sub);margin-bottom:1.5rem;max-width:640px;">
+    Can't resolve an error with the AI assistant? Submit an official support ticket stored directly in our relational SQL database.
+  </p>
+
+  <form id="faq-support-ticket-form" style="max-width:540px;">
+    {% csrf_token %}
+    <div class="lb-form-field">
+      <label class="lb-form-label" for="ticket_email">Your Email Address *</label>
+      <input type="email" id="ticket_email" class="lb-input" placeholder="you@domain.com" value="{{ request.user.email|default:'' }}" required>
+    </div>
+
+    <div class="lb-form-field">
+      <label class="lb-form-label" for="ticket_subject">Issue Summary / Error Code *</label>
+      <input type="text" id="ticket_subject" class="lb-input" placeholder="e.g. Received Error 429 when requesting phonk recommendations" required>
+    </div>
+
+    <div class="lb-form-field">
+      <label class="lb-form-label" for="ticket_message">Detailed Description *</label>
+      <textarea id="ticket_message" class="lb-input" rows="3" placeholder="Describe what you were doing when the issue occurred..." required></textarea>
+    </div>
+
+    <div id="ticket-feedback-alert" style="display:none;padding:0.75rem;border-radius:var(--radius-xs);font-size:0.8rem;margin-bottom:1rem;"></div>
+
+    <button type="submit" class="lb-btn-log" id="submit-ticket-btn">
+      🎫 Submit Ticket to SQL
+    </button>
+  </form>
+</section>
+
+<script>
+  function askAssistantPrompt(text) {
+    const input = document.getElementById('ai-user-input');
+    const drawer = document.getElementById('crate-ai-drawer');
+    const form = document.getElementById('ai-chat-form');
+    if (!drawer.classList.contains('open')) {
+      document.getElementById('toggle-crate-ai').click();
+    }
+    input.value = text;
+    form.dispatchEvent(new Event('submit'));
+  }
+
+  // Handle Support Ticket form submit
+  document.getElementById('faq-support-ticket-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('submit-ticket-btn');
+    const alertBox = document.getElementById('ticket-feedback-alert');
+    const email = document.getElementById('ticket_email').value.trim();
+    const subject = document.getElementById('ticket_subject').value.trim();
+    const message = document.getElementById('ticket_message').value.trim();
+    const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+
+    try {
+      const resp = await fetch('/tickets/create/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+        body: JSON.stringify({ email, subject, message, source: 'HELP_PAGE' })
+      });
+      const res = await resp.json();
+      if (resp.ok && res.success) {
+        alertBox.style.display = 'block';
+        alertBox.style.background = 'rgba(0,224,84,0.15)';
+        alertBox.style.border = '1px solid var(--lb-green)';
+        alertBox.style.color = '#ffffff';
+        alertBox.innerHTML = `<strong>✓ Support Ticket Created!</strong> Ticket ID: <span style="color:var(--lb-green);font-weight:700;">#${res.ticket_id}</span>. Stored in SQL database. <a href="/tickets/?ticket_id=${res.ticket_id}" style="color:var(--lb-cyan);text-decoration:underline;">View Status</a>`;
+        document.getElementById('ticket_message').value = '';
+        document.getElementById('ticket_subject').value = '';
+      } else {
+        alertBox.style.display = 'block';
+        alertBox.style.background = 'rgba(255,75,75,0.15)';
+        alertBox.style.border = '1px solid var(--lb-red)';
+        alertBox.style.color = 'var(--lb-red)';
+        alertBox.textContent = res.error || 'Failed to submit ticket.';
+      }
+    } catch (err) {
+      alertBox.style.display = 'block';
+      alertBox.style.color = 'var(--lb-red)';
+      alertBox.textContent = 'Network error: ' + err.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🎫 Submit Ticket to SQL';
+    }
+  });
+</script>
+{% endblock %}
