@@ -16,3 +16,12 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "sais_app.settings")
 application = get_wsgi_application()
 app = application
 
+if os.environ.get("VERCEL"):
+    from django.core.management import call_command
+    try:
+        call_command("migrate", interactive=False)
+        call_command("seed_songs")
+    except Exception as e:
+        print("Vercel startup init notice:", e)
+
+
