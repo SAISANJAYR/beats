@@ -119,3 +119,42 @@ def get_recent_chat_logs(limit: int = 10) -> list:
             logger.warning("Failed to read from MongoDB chat_logs: %s", e)
 
     return _FALLBACK_CHAT_LOGS[-limit:]
+
+
+def get_recent_feedback(limit: int = 10) -> list:
+    """Retrieve recent feedback entries from MongoDB or fallback."""
+    db = get_mongo_db()
+    if db is not None:
+        try:
+            cursor = db.feedback.find().sort("created_at", -1).limit(limit)
+            items = list(cursor)
+            for item in items:
+                item["_id"] = str(item["_id"])
+            return items
+        except Exception as e:
+            logger.warning("Failed to read from MongoDB feedback: %s", e)
+
+    return _FALLBACK_FEEDBACK[-limit:]
+
+
+def get_mongo_stats() -> dict:
+    """Returns document counts and storage status for MongoDB."""
+    db = get_mongo_db()
+    if db is not None:
+        try:
+            return {
+                "connected": True,
+                "database": DB_NAME,
+                "chat_logs_count": db.chat_logs.count_documents({}),
+                "feedback_count": db.feedback.count_documents({})
+            }
+        except Exception as e:
+            logger.warning("Failed to get MongoDB stats: %s", e)
+
+    return {
+        "connected": False,
+        "database": f"{DB_NAME} (in-memory fallback buffer)",
+        "chat_logs_count": len(_FALLBACK_CHAT_LOGS),
+        "feedback_count": len(_FALLBACK_FEEDBACK)
+    }
+
